@@ -3,7 +3,7 @@ Contributors: opensignage-contributors
 Tags: digital signage, woocommerce, kiosk, telegram, display
 Requires at least: 6.3
 Requires PHP: 8.0
-Stable tag: 0.1.0-beta.1
+Stable tag: 0.1.0-beta.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -39,7 +39,7 @@ Add and enable at least one slide, confirm the REST API works, and exclude the s
 Yes, using your own bot, a secret webhook, and allowlisted chat/user IDs.
 
 == Changelog ==
-= 0.1.0-beta.1 =
-* First independent, English-language, white-label beta distribution.
-* Namespaced plugin code and routes for side-by-side evaluation.
-* No store-specific configuration or media included.
+= 0.1.0-beta.2 =
+* Check a static revision file every 3 seconds without starting WordPress/PHP for each check.
+* Fetch full state only for changes, message expiry, or periodic recovery.
+* Fall back to REST polling when uploads cannot serve the marker.
