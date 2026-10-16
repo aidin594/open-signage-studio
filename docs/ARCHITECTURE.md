@@ -16,7 +16,7 @@ The public edition stores data under its own `osgs_*` option/transient/meta pref
 
 ## Screen updates
 
-Browsers query `/wp-json/open-signage/v1/screen/state` using a revision number (default 3-second poll). Responses are minimal and public. Rotation uses JavaScript timers and does not need a new server request on every slide.
+The player checks `/wp-content/uploads/osgs-signal/revision.json` every 3 seconds. Nginx/Apache can serve this tiny static file without starting PHP. An updated revision triggers `/wp-json/open-signage/v1/screen/state`; WordPress is also contacted when timed messages expire or every 120 seconds as a recovery check. If the static file is unavailable, conventional REST polling resumes. Static HTTP requests continue; only dynamic WordPress work is reduced. Slide rotation remains entirely in the browser.
 
 ## Security boundaries
 
