@@ -244,7 +244,7 @@ final class OSGS_Telegram {
         $m=OSGS::message(); $paused=(bool)get_option('osgs_paused',false);
         $s="<b>📺 Your Store · Live</b>\n\n";
         $seen=(int)get_option('osgs_screen_seen',0);
-        $online=$seen>0 && time()-$seen<=95;
+        $online=$seen>0 && time()-$seen<=180;
         $s.='Playback: '.($paused?'⏸ Paused':'▶️ Enabled')."\n";
         $s.='Screen requests: '.($online?'🟢 Recently active':'⚪ None recently')." (public URL, device not verified)\n";
         $s.='Slides: <b>'.count($visible).'</b> showing / '.count($slides)." total\n";
