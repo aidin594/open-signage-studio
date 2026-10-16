@@ -132,13 +132,57 @@ function render(){clearTimeout(rotation);const s=data.settings;document.body.sty
  }
  if(!data.paused&&data.slides.length>1)rotation=setTimeout(()=>{data.idx=(data.idx+1)%data.slides.length;render();},Math.max(3,slide.duration||s.duration||8)*1000);
 }
-async function poll(){const headers={};if(config.preview)headers['X-OSGS-Preview']='1';
- try{const r=await fetch(config.api+'screen/state?since='+data.rev+'&_ts='+Date.now(),{headers,cache:'no-store',credentials:'same-origin'});
-   if(!r.ok)throw Error(r.status===403?'Screen access denied':'Connection error '+r.status);
-   const body=await r.json();if(body.changed){const old=data.slides[data.idx]?.id;data.slides=body.slides||[];data.message=body.message;data.paused=!!body.paused;data.settings=body.settings||data.settings;data.rev=body.revision;const index=data.slides.findIndex(x=>x.id===old);data.idx=index>=0?index:0;render();}else data.rev=body.revision||data.rev;
-   errorShown=false;document.querySelector('.osgs-errorbar')?.remove();
- }catch(e){if(!errorShown){const b=el('div','osgs-errorbar','Connection interrupted · '+e.message);app.append(b);errorShown=true;}}
- finally{polling=setTimeout(poll,Math.max(3,Math.min(60,data.settings.poll||3))*1000);}}
+// Fast path: a tiny static revision marker is fetched frequently.
+// Full WordPress/PHP REST requests are only needed when the marker changes,
+// for message expiration, or at a periodic recovery checkpoint.
+const SIGNAL_POLL_MS=3000;
+const REST_RECOVERY_MS=120000;
+let lastRestAt=0, signalHealthy=!!config.signalUrl, expiryTimer=null;
+function scheduleMessageExpiry(serverTime){
+  clearTimeout(expiryTimer);expiryTimer=null;
+  const until=Number(data.message?.until||0);
+  if(!until)return;
+  const secondsLeft=until-(Number(serverTime)||Date.now()/1000);
+  expiryTimer=setTimeout(()=>{void fetchState().catch(()=>{});},Math.max(1000,secondsLeft*1000+500));
+}
+async function fetchState(){
+  const headers={};if(config.preview)headers['X-OSGS-Preview']='1';
+  const r=await fetch(config.api+'screen/state?since='+data.rev+'&_ts='+Date.now(),{headers,cache:'no-store',credentials:'same-origin'});
+  if(!r.ok)throw Error(r.status===403?'Screen access denied':'Connection error '+r.status);
+  const body=await r.json();
+  lastRestAt=Date.now();
+  if(body.changed){
+    const old=data.slides[data.idx]?.id;
+    data.slides=body.slides||[];data.message=body.message;data.paused=!!body.paused;
+    data.settings=body.settings||data.settings;data.rev=body.revision;
+    const index=data.slides.findIndex(x=>x.id===old);data.idx=index>=0?index:0;
+    render();scheduleMessageExpiry(body.server_time);
+  } else {data.rev=body.revision||data.rev; scheduleMessageExpiry();}
+  return body;
+}
+async function poll(){
+  try{
+    if(!lastRestAt) await fetchState();
+    else if(config.signalUrl){
+      // Cache-busting and no-store discourage stale intermediate caches.
+      let marker;
+      try{
+        const url=config.signalUrl+(config.signalUrl.includes('?')?'&':'?')+'t='+Date.now();
+        const r=await fetch(url,{cache:'no-store',credentials:'omit'});
+        if(!r.ok)throw Error('Static marker HTTP '+r.status);
+        marker=await r.json();
+        if(!Number.isSafeInteger(marker.revision) || marker.revision<1)throw Error('Invalid static marker');
+        signalHealthy=true;
+      }catch(e){signalHealthy=false;}
+      if(!signalHealthy || marker.revision!==data.rev || Date.now()-lastRestAt>=REST_RECOVERY_MS) await fetchState();
+    }else await fetchState();
+    errorShown=false;document.querySelector('.osgs-errorbar')?.remove();
+  }catch(e){
+    if(!errorShown){const b=el('div','osgs-errorbar','Connection interrupted · '+e.message);app.append(b);errorShown=true;}
+  }finally{
+    polling=setTimeout(poll,config.signalUrl && signalHealthy?SIGNAL_POLL_MS:Math.max(3000,Math.min(60000,(data.settings.poll||30)*1000)));
+  }
+}
 if(document.fonts && document.fonts.ready){document.fonts.ready.then(()=>{const pane=document.querySelector('.osgs-info');if(pane)fitProductTitle(pane.querySelector('.osgs-producttitle'),pane);const banner=document.querySelector('.osgs-pricebanner');if(banner)fitPrice(banner.firstElementChild,banner);}).catch(()=>{});}
 window.addEventListener('resize',()=>{const banner=document.querySelector('.osgs-pricebanner');if(banner)fitPrice(banner.firstElementChild,banner);const pane=document.querySelector('.osgs-info');if(pane)fitProductTitle(pane.querySelector('.osgs-producttitle'),pane);});
 window.addEventListener('keydown',e=>{if(e.key==='f'&&document.fullscreenEnabled){document.documentElement.requestFullscreen().catch(()=>{});}});
