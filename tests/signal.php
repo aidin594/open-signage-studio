@@ -22,6 +22,7 @@ OSGS::bump();
 $next=json_decode(file_get_contents($filename),true);
 if($next['revision']<=$first['revision'])throw new RuntimeException('Signal did not advance');
 $method=new ReflectionMethod(OSGS::class,'ensure_signal');
+$method->setAccessible(true); // Required for PHP 8.0; harmless on newer PHP.
 if($method->invoke(null)!=='https://example.test/wp-content/uploads/osgs-signal/revision.json')throw new RuntimeException('Unexpected public URL');
 @unlink($filename);@unlink($GLOBALS['osgs_test_dir'].'/osgs-signal/.revision.lock');@rmdir($GLOBALS['osgs_test_dir'].'/osgs-signal');@rmdir($GLOBALS['osgs_test_dir']);
 echo "PASS: atomic public revision markers contain only a revision and advance on updates\n";
