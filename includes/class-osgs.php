@@ -33,6 +33,7 @@ final class OSGS {
         flush_rewrite_rules();
         if (!get_option('osgs_settings')) add_option('osgs_settings', self::defaults(), '', false);
         if (!get_option('osgs_revision')) add_option('osgs_revision', 1, '', false);
+        self::publish_signal(self::revision());
         add_filter('cron_schedules', static function ($s) { $s['osgs_15m'] = ['interval'=>900,'display'=>'OpenSignage: 15 minutes']; return $s; });
         if (!wp_next_scheduled('osgs_sync_cron')) wp_schedule_event(time()+300,'osgs_15m','osgs_sync_cron');
     }
@@ -98,7 +99,52 @@ final class OSGS {
     }
     public static function respond($data): WP_REST_Response { $r=rest_ensure_response($data); $r->header('Cache-Control','no-store, private'); return $r; }
     public static function err(string $message,int $code=400): WP_Error { return new WP_Error('osgs_error',$message,['status'=>$code]); }
-    public static function bump(): void { update_option('osgs_revision', (int)get_option('osgs_revision',1)+1,false); }
+    /**
+     * Public revision marker in uploads, served by Nginx/Apache without PHP.
+     * Never store slide content, credentials, or control tokens in this file.
+     * If uploads cannot be written, players fall back to standard REST.
+     */
+    private static function signal_location(): array {
+        $uploads=wp_upload_dir();
+        if (!empty($uploads['error']) || empty($uploads['basedir']) || empty($uploads['baseurl'])) return [];
+        $folder='osgs-signal';
+        return ['dir'=>trailingslashit($uploads['basedir']).$folder,
+                'url'=>trailingslashit($uploads['baseurl']).$folder.'/revision.json'];
+    }
+    private static function publish_signal(int $revision): bool {
+        $location=self::signal_location();
+        if (!$location) return false;
+        $dir=$location['dir'];
+        if (!is_dir($dir) && !wp_mkdir_p($dir)) return false;
+        $target=$dir.'/revision.json';
+        $lock=@fopen($dir.'/.revision.lock','c');
+        if (!$lock) return false;
+        try {
+            if (!flock($lock, LOCK_EX)) return false;
+            $existing=@json_decode((string)@file_get_contents($target),true);
+            if (is_array($existing) && (int)($existing['revision']??0)>=$revision) return true;
+            $tmp=@tempnam($dir,'.revision-');
+            if ($tmp===false) return false;
+            $data=wp_json_encode(['revision'=>$revision]);
+            $written=@file_put_contents($tmp,$data);
+            if ($written===false || $written!==strlen($data)) { @unlink($tmp); return false; }
+            @chmod($tmp,0644);
+            if (!@rename($tmp,$target)) { @unlink($tmp); return false; }
+            return true;
+        } finally { flock($lock, LOCK_UN); fclose($lock); }
+    }
+    private static function ensure_signal(): string {
+        $location=self::signal_location();
+        if (!$location) return '';
+        $target=$location['dir'].'/revision.json';
+        if (!is_file($target)) self::publish_signal(self::revision());
+        return is_readable($target) ? esc_url_raw($location['url']) : '';
+    }
+    public static function bump(): void {
+        $revision=max((int)get_option('osgs_revision',1)+1,(int)floor(microtime(true)*1000));
+        update_option('osgs_revision',$revision,false);
+        self::publish_signal($revision);
+    }
     public static function revision(): int { return (int)get_option('osgs_revision',1); }
     private static function register(string $path,string $methods,callable $callback,$permission='manage'): void {
         $permission_callback = match($permission) {
@@ -169,7 +215,7 @@ final class OSGS {
         header('X-Content-Type-Options: nosniff');
         header('Content-Security-Policy: frame-ancestors \'self\'');
         $asset=$page==='screen'?'player':'control';
-        $config=['api'=>esc_url_raw(rest_url(self::NS.'/')), 'preview'=>$preview,'nonce'=>$preview?wp_create_nonce('wp_rest'):''];
+        $config=['api'=>esc_url_raw(rest_url(self::NS.'/')), 'preview'=>$preview,'nonce'=>$preview?wp_create_nonce('wp_rest'):'', 'signalUrl'=>$page==='screen'?self::ensure_signal():''];
         ?><!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><title><?php echo esc_html($page==='screen'?'OpenSignage':'OpenSignage Quick Control'); ?></title><link rel="stylesheet" href="<?php echo esc_url(OSGS_URL.'assets/rich-editor.css?ver='.OSGS_VERSION); ?>"><link rel="stylesheet" href="<?php echo esc_url(OSGS_URL.'assets/'.$asset.'.css?ver='.OSGS_VERSION); ?>"></head><body>
         <div id="osgs-app"></div><script>window.OSGS_PUBLIC=<?php echo wp_json_encode($config,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT); ?>;</script><script defer src="<?php echo esc_url(OSGS_URL.'assets/rich-editor.js?ver='.OSGS_VERSION); ?>"></script><script defer src="<?php echo esc_url(OSGS_URL.'assets/'.$asset.'.js?ver='.OSGS_VERSION); ?>"></script></body></html><?php
         exit;

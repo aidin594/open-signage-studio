@@ -24,3 +24,7 @@
 ## Public beta limitations
 
 This project has not completed a professional third-party security audit or full cross-version integration test suite. Do not market it as audited or production-certified.
+
+### Fast static revision marker
+
+The public `wp-content/uploads/osgs-signal/revision.json` contains only a numeric `revision` and is intentionally world-readable. It must never contain message contents, product data or private keys. CDN caches must not serve this file stale; the browser uses a changing query and recovers from REST periodically. If uploads cannot be written or reached, standard REST polling is used.

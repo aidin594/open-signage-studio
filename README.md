@@ -43,7 +43,7 @@ Mobile quick control ─┤                                   /signage-screen/
 Telegram (optional) ───┘
 ```
 
-The player fetches a minimal read-only state from REST on an interval; slide rotation itself runs in the browser. Only privileged endpoints can mutate settings or content. The public display **shows whatever text you publish**, so do not place private information in slides or announcements.
+The player checks a tiny static revision marker every 3 seconds (served by the web server when supported). WordPress REST is contacted only when the revision changes, a timed message expires, or every 120 seconds as a recovery check. If static uploads cannot be reached, the player automatically falls back to standard REST polling. **HTTP checks still occur every 3 seconds; the savings are in expensive WordPress/PHP/database work.** Slide rotation itself runs in the browser. Only privileged endpoints can mutate settings or content. The public display **shows whatever text you publish**, so do not place private information in slides or announcements.
 
 ## Important: independent public edition
 
@@ -82,3 +82,15 @@ Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Pl
 ## License
 
 [GNU General Public License v2.0 or later](LICENSE). No proprietary assets, store-specific credentials, real customer data, or business-specific product imagery are bundled.
+
+## Fast updates with low PHP load
+
+The player checks a public revision marker at `wp-content/uploads/osgs-signal/revision.json`. On WordPress content changes (including Telegram buttons), the plugin atomically updates the marker; the player notices a different revision and fetches the full REST state.
+
+- **Normal:** one tiny static request about every 3 seconds; no PHP if the web server serves JSON directly.
+- **Dynamic REST:** on changes, at timed-message expiration, or every 120 seconds as recovery.
+- **Fallback:** if uploads cannot be written or the static marker cannot be fetched, use the existing REST refresh setting.
+- **Security:** the marker contains only a numeric revision; no messages, URLs, product details, tokens or other credentials.
+- **CDN/hosting:** check that the static marker is reachable and not returned stale. A cache-busting query is used; recovery REST remains a safety net.
+
+This reduces dynamic PHP/SQL activity, **not** total HTTP request count. The screen online indicator is approximate, not device-authenticated.

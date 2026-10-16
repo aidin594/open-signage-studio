@@ -7,3 +7,5 @@ find assets -type f -name '*.js' -print0 | while IFS= read -r -d '' f; do node -
 python3 tests/source_hygiene.py
 python3 tests/structure.py
 php tests/smoke.php
+php tests/signal.php
+node tests/player-signal.cjs

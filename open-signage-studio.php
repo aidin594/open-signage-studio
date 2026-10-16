@@ -2,7 +2,7 @@
 /**
  * Plugin Name: OpenSignage Studio
  * Description: White-label digital signage for WooCommerce, with playlists, formatted announcements and optional Telegram control.
- * Version: 0.1.0-beta.1
+ * Version: 0.1.0-beta.2
  * Requires at least: 6.3
  * Requires PHP: 8.0
  * Author: OpenSignage Contributors
@@ -11,7 +11,7 @@
  * Text Domain: open-signage-studio
  */
 if (!defined('ABSPATH')) { exit; }
-define('OSGS_VERSION', '0.1.0-beta.1');
+define('OSGS_VERSION', '0.1.0-beta.2');
 define('OSGS_FILE', __FILE__);
 define('OSGS_PATH', plugin_dir_path(__FILE__));
 define('OSGS_URL', plugin_dir_url(__FILE__));
